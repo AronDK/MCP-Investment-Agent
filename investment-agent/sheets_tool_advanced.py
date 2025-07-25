@@ -54,38 +54,67 @@ class SheetsTool:
                     "Average Cost": record.get("Cost Per Share"),
                     "Current Price": record.get("Last Price"),
                     "Market Value": record.get("Mkt Value"),
-                    "Unrealized P/L": record.get("Unrealized Gain/Loss")
-                })
+                    "Unrealized P/L": record.get("Unrealized Gain/Loss")                })
             return formatted_portfolio
         except Exception as e:
             print(f"Error fetching portfolio: {e}")
             raise
 
     def log_transaction(self, symbol, action, quantity, price, rationale):
-        """Appends a new record to the 'Transactions_OSV' tab."""
+        """Appends a new record to the 'Transactions_OSV' tab with proper formulas."""
         try:
             print(f"Logging transaction: {action} {quantity} of {symbol}...")
             transactions_sheet = self.spreadsheet.worksheet("Transactions_OSV")
             
-            date = datetime.now(pytz.utc).strftime('%m/%d/%Y')
+            # Get the next row number (current row count + 1)
+            next_row = transactions_sheet.row_count + 1
             
-            # --- CORRECTION: Create a list that matches the 17 columns in the screenshot ---
+            date = datetime.now(pytz.utc).strftime('%m/%d/%Y')  # Match format from screenshot
+            
             # Initialize a row with 17 empty values (for columns A through Q)
             row_to_append = [''] * 17
             
-            # Populate the specific columns we have data for, based on the screenshot
+            # Populate the data columns
             row_to_append[0] = date                   # Column A: Date
-            row_to_append[1] = action.upper()        # Column B: Type
+            row_to_append[1] = action.upper()        # Column B: Type (BUY/SELL)
             row_to_append[2] = symbol                # Column C: Stock
             row_to_append[3] = quantity              # Column D: Transacted Units
             row_to_append[4] = price                 # Column E: Transacted Price (per unit)
-            row_to_append[5] = 0.0                   # Column F: Fees
-            # Column J: Transacted Value (Formula)
-            row_to_append[9] = f"=D{transactions_sheet.row_count + 1}*E{transactions_sheet.row_count + 1}" 
-            row_to_append[16] = rationale            # Column Q: Reason
+            row_to_append[5] = 3.0                   # Column F: Fees ($3 per transaction)
+            row_to_append[6] = ""                    # Column G: Stock Split Ratio (empty for regular trades)
+            
+            # Column H: Previous Units formula
+            row_to_append[7] = f'=if($C{next_row}="","",iferror(if(row()<>2,INDEX(arrayformula(filter($I$1:$I${next_row-1},$C$1:$C${next_row-1}<>"",row($C$1:$C${next_row-1})=max(if($C$1:$C${next_row-1}=C{next_row},row($C$1:$C${next_row-1}),0)))),1),0),0))'
+            
+            # Column I: Cumulative Units formula
+            row_to_append[8] = f'=if(C{next_row}="","",if(B{next_row}="Buy",H{next_row}+D{next_row},if(B{next_row}="Sell",H{next_row}-D{next_row},if(or(B{next_row}="Div",B{next_row}="Fee"),H{next_row},if(B{next_row}="Split",H{next_row}*G{next_row},0)))))'
+            
+            # Column J: Transacted Value formula
+            row_to_append[9] = f'=if(C{next_row}="","",if(B{next_row}="Buy",E{next_row}*D{next_row}+F{next_row},if(B{next_row}="Sell",E{next_row}*D{next_row}-F{next_row},E{next_row}*D{next_row}-F{next_row})))'
+            
+            # Column K: Previous Cost formula
+            row_to_append[10] = f'=if(C{next_row}="","",iferror(if(row()<>2,INDEX(arrayformula(filter($N$1:$N${next_row-1},$C$1:$C${next_row-1}<>"",row($C$1:$C${next_row-1})=max(if($C$1:$C${next_row-1}=C{next_row},row($C$1:$C${next_row-1}),0)))),1),0),0))'
+            
+            # Column L: Cost of Transaction formula
+            row_to_append[11] = f'=if(C{next_row}="","",if(B{next_row}="Sell",if(H{next_row}=0,0,D{next_row}/H{next_row}*K{next_row}),"-"))'
+            
+            # Column M: Avg Stock Price formula
+            row_to_append[12] = f'=if(C{next_row}="","",if(B{next_row}="Sell",if(H{next_row}=0,0,K{next_row}/H{next_row}),"-"))'
+            
+            # Column N: Cumulative Cost formula
+            row_to_append[13] = f'=if(C{next_row}="","",if(B{next_row}="Buy",K{next_row}+J{next_row},if(or(B{next_row}="Div",B{next_row}="Fee"),K{next_row},if(B{next_row}="Sell",if(K{next_row}<=0,"Error.No Previous units.",K{next_row}-L{next_row}),if(B{next_row}="Split",K{next_row},"Error")))))'
+            
+            # Column O: Gains/Losses from Sale formula
+            row_to_append[14] = f'=if(C{next_row}="","",if(B{next_row}="Sell",J{next_row}-L{next_row},if(or(B{next_row}="Div",B{next_row}="Fee"),J{next_row},0)))'
+            
+            # Column P: Realised Gains/Losses % formula
+            row_to_append[15] = f'=if(C{next_row}="","",if(B{next_row}="Sell",(J{next_row}-L{next_row})/L{next_row},""))'
+            
+            # Column Q: Reason
+            row_to_append[16] = rationale
             
             transactions_sheet.append_row(row_to_append, value_input_option='USER_ENTERED')
-            print("Transaction entry added successfully.")
+            print("Transaction entry added successfully with all formulas.")
         except Exception as e:
             print(f"Error logging transaction: {e}")
             raise
