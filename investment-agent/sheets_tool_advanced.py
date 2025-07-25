@@ -26,7 +26,6 @@ class SheetsTool:
             print(f"Failed to initialize SheetsTool: {e}")
             raise
 
-    # --- NEW DEBUGGING FUNCTION ---
     def list_all_worksheets(self):
         """Lists the titles of all worksheets in the spreadsheet."""
         try:
@@ -37,8 +36,6 @@ class SheetsTool:
             print(f"Error listing worksheets: {e}")
             raise
 
-    # --- HIGH-LEVEL FUNCTIONS ---
-
     def get_portfolio_and_market_data(self):
         """Retrieves and formats the current portfolio from the 'Summary_OSV' tab."""
         try:
@@ -46,36 +43,18 @@ class SheetsTool:
             portfolio_sheet = self.spreadsheet.worksheet("Summary_OSV")
             records = portfolio_sheet.get_all_records()
             
-            print(f"DEBUG: Found {len(records)} total records")
-            if records:
-                print(f"DEBUG: First record keys: {list(records[0].keys())}")
-                print(f"DEBUG: First few records: {records[:3]}")
-            
-            # Filter for records that have actual stock data (not empty rows)
-            valid_records = []
-            for record in records:
-                # Based on your screenshot, look for the 'Stock Ticker' column
-                ticker = record.get('Stock Ticker', '').strip()
-                investment_category = record.get('Investment Category', '').strip()
-                
-                # A valid record should have a stock ticker and not be empty/placeholder rows
-                if (ticker and ticker not in ['', '-', 'No Data', '~'] and 
-                    investment_category and investment_category not in ['', '-', 'No Data', '~']):
-                    valid_records.append(record)
-            
+            valid_records = [r for r in records if r.get('Stock Ticker')]
             print(f"Found {len(valid_records)} valid records in portfolio.")
             
             formatted_portfolio = []
             for record in valid_records:
                 formatted_portfolio.append({
                     "Symbol": record.get("Stock Ticker"),
-                    "Investment_Category": record.get("Investment Category"),
-                    "Shares": record.get("Shares"),
-                    "Cost_Per_Share": record.get("Cost (Per Share)"),
-                    "Last_Price": record.get("Last Price"),
-                    "Market_Value": record.get("Mkt Value"),
-                    "Unrealized_PL": record.get("Unrealized Gain/Loss"),
-                    "Unrealized_Percent": record.get("Unrealized Gain/Loss %")
+                    "Quantity": record.get("Shares"),
+                    "Average Cost": record.get("Cost Per Share"),
+                    "Current Price": record.get("Last Price"),
+                    "Market Value": record.get("Mkt Value"),
+                    "Unrealized P/L": record.get("Unrealized Gain/Loss")
                 })
             return formatted_portfolio
         except Exception as e:
@@ -90,16 +69,21 @@ class SheetsTool:
             
             date = datetime.now(pytz.utc).strftime('%m/%d/%Y')
             
-            row_to_append = [
-                date,
-                symbol,
-                action.upper(),
-                quantity,
-                price,
-                0, # Fees
-                f"=D{transactions_sheet.row_count + 1}*E{transactions_sheet.row_count + 1}", # Total
-                rationale # Rationale goes into the 'Notes' column
-            ]
+            # --- CORRECTION: Create a list that matches the 17 columns in the screenshot ---
+            # Initialize a row with 17 empty values (for columns A through Q)
+            row_to_append = [''] * 17
+            
+            # Populate the specific columns we have data for, based on the screenshot
+            row_to_append[0] = date                   # Column A: Date
+            row_to_append[1] = action.upper()        # Column B: Type
+            row_to_append[2] = symbol                # Column C: Stock
+            row_to_append[3] = quantity              # Column D: Transacted Units
+            row_to_append[4] = price                 # Column E: Transacted Price (per unit)
+            row_to_append[5] = 0.0                   # Column F: Fees
+            # Column J: Transacted Value (Formula)
+            row_to_append[9] = f"=D{transactions_sheet.row_count + 1}*E{transactions_sheet.row_count + 1}" 
+            row_to_append[16] = rationale            # Column Q: Reason
+            
             transactions_sheet.append_row(row_to_append, value_input_option='USER_ENTERED')
             print("Transaction entry added successfully.")
         except Exception as e:
@@ -109,26 +93,29 @@ class SheetsTool:
     # --- GRANULAR MODELLING FUNCTIONS ---
 
     def get_cell_value(self, cell_notation):
-        """
-        Reads and returns the value of a single cell.
-        :param cell_notation: Standard A1 notation (e.g., 'Portfolio Summary!B3').
-        """
+        """Reads and returns the value of a single cell."""
         try:
             print(f"Getting cell value from: {cell_notation}")
             sheet_name, cell_address = cell_notation.split('!')
             worksheet = self.spreadsheet.worksheet(sheet_name)
-            result = worksheet.get(cell_address)
-            return result[0][0] if result and result[0] else None
+            return worksheet.acell(cell_address).value
         except Exception as e:
             print(f"Error in get_cell_value for {cell_notation}: {e}")
             raise
 
+    def get_range_values(self, range_notation):
+        """Reads and returns the values of a range of cells."""
+        try:
+            print(f"Getting range values from: {range_notation}")
+            sheet_name, cell_range = range_notation.split('!')
+            worksheet = self.spreadsheet.worksheet(sheet_name)
+            return worksheet.get(cell_range)
+        except Exception as e:
+            print(f"Error in get_range_values for {range_notation}: {e}")
+            raise
+
     def update_cell_value(self, cell_notation, value):
-        """
-        Updates a single cell with a given value. Can write values or formulas.
-        :param cell_notation: Standard A1 notation (e.g., 'Portfolio Summary!B3').
-        :param value: The value or formula to write (e.g., 123 or '=SUM(A1:B1)').
-        """
+        """Updates a single cell with a given value."""
         try:
             print(f"Updating cell {cell_notation} with value: {value}")
             sheet_name, cell_address = cell_notation.split('!')

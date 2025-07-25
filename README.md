@@ -5,7 +5,7 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
 ## 🚀 Features
 
 - **Autonomous Decision Making**: Uses ReAct (Reasoning + Acting) framework for intelligent investment decisions
-- **Real-time Market Data**: Integrates with Tavily API for current market information and news
+- **Real-time Market Data**: Integrates with Grok Live Search for current market information and news
 - **Advanced AI**: Powered by Grok-4 for sophisticated financial analysis
 - **Portfolio Management**: Automatically tracks positions, cash balance, and transaction history
 - **Google Sheets Integration**: Seamlessly manages portfolio data in Google Sheets
@@ -22,7 +22,7 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
                               │                       │
                               ▼                       ▼
                     ┌──────────────────┐    ┌─────────────────┐
-                    │  Google Sheets   │    │  Tavily Search  │
+                    │  Google Sheets   │    │ Grok Live Search│
                     │  (Portfolio Data)│    │  (Market Data)  │
                     └──────────────────┘    └─────────────────┘
 ```
@@ -30,7 +30,7 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
 ## 🧠 How It Works
 
 1. **Data Collection**: Reads current portfolio positions and cash balance from Google Sheets
-2. **Market Analysis**: Searches for current market conditions using Tavily API
+2. **Market Analysis**: Searches for current market conditions using Grok Live Search
 3. **AI Reasoning**: Grok-4 analyzes data using ReAct framework to make investment decisions
 4. **Action Execution**: Automatically executes BUY/SELL/HOLD decisions
 5. **Transaction Logging**: Records all transactions and updates portfolio balance
@@ -48,7 +48,7 @@ The agent follows a structured decision-making process:
 ## 🛠️ Technology Stack
 
 - **AI Model**: Grok-4 (xAI) for investment analysis
-- **Web Search**: Tavily API for real-time market data
+- **Web Search**: Grok Live Search for real-time market data
 - **Data Storage**: Google Sheets for portfolio management
 - **Cloud Platform**: Google Cloud Functions
 - **Scheduling**: Google Cloud Scheduler
@@ -58,7 +58,6 @@ The agent follows a structured decision-making process:
 
 - Google Cloud Platform account
 - xAI API key (for Grok-4 access)
-- Tavily API key (for market data)
 - Google Sheets API credentials
 - Python 3.11+
 
@@ -71,13 +70,13 @@ gcloud functions deploy Investment-agent \
   --gen2 \
   --region=us-central1 \
   --runtime=python311 \
-  --source=. \
+  --source=./investment-agent \
   --entry-point=run_investment_cycle \
   --trigger-http \
   --allow-unauthenticated \
   --service-account=your-service-account@your-project.iam.gserviceaccount.com \
   --timeout=300s \
-  --set-env-vars="GCP_PROJECT_ID=your-project-id,GOOGLE_SHEET_ID=your-sheet-id,GROK_API_KEY=your-grok-key,TAVILY_API_KEY=your-tavily-key"
+  --set-env-vars="GCP_PROJECT_ID=your-project-id,GOOGLE_SHEET_ID=your-sheet-id,GROK_API_KEY=your-grok-key"
 ```
 
 ### 2. Set up Cloud Scheduler (Optional)
@@ -93,12 +92,14 @@ gcloud scheduler jobs create http investment-agent-scheduler \
 ## 📁 Project Structure
 
 ```
-investment-agent/
-├── main.py                    # Main Cloud Function entry point
-├── sheets_tool_advanced.py    # Google Sheets integration
-├── requirements.txt           # Python dependencies
-├── README.md                 # This file
-└── .gitignore               # Git ignore file
+MCP-Investment-Agent/
+├── investment-agent/          # Core investment agent code
+│   ├── main.py               # Main Cloud Function entry point
+│   ├── sheets_tool_advanced.py  # Google Sheets integration
+│   └── moomoo_tool.py        # MooMoo trading API wrapper
+├── requirements.txt          # Python dependencies
+├── README.md                # This file
+└── .gitignore              # Git ignore configuration
 ```
 
 ## 🔧 Configuration
@@ -108,7 +109,6 @@ investment-agent/
 - `GCP_PROJECT_ID`: Your Google Cloud Project ID
 - `GOOGLE_SHEET_ID`: ID of your Google Sheets portfolio tracker
 - `GROK_API_KEY`: Your xAI API key for Grok-4 access
-- `TAVILY_API_KEY`: Your Tavily API key for market data
 
 ### Google Sheets Structure
 

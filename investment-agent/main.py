@@ -4,7 +4,6 @@ import re
 import functions_framework
 from google.cloud import secretmanager
 import traceback
-import time
 import requests
 import sheets_tool_advanced as sheets_tool
 
@@ -22,21 +21,20 @@ def get_secret(secret_name, project_id):
 # --- Configuration ---
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "your-gcp-project-id")
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "your-google-sheet-id")
-MAX_REASONING_STEPS = 5 
+# MODIFICATION: Increased reasoning steps
+MAX_REASONING_STEPS = 10 
 CASH_ON_HAND_CELL = 'Portfolio Summary!B3'
 
 # --- Initialize clients and tools ---
 try:
     print("--- Initializing components ---")
+    # MODIFICATION: Removed TAVILY_API_KEY
     GROK_API_KEY = os.environ.get("GROK_API_KEY")
-    TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
     
     if not GROK_API_KEY:
         raise ValueError("GROK_API_KEY environment variable not set.")
-    if not TAVILY_API_KEY:
-        raise ValueError("TAVILY_API_KEY environment variable not set.")
     
-    print("Grok and Tavily API keys configured.")
+    print("Grok API key configured.")
 
     print("Fetching credentials from Secret Manager...")
     sheets_credentials_json = get_secret("google-sheets-credentials", GCP_PROJECT_ID)
@@ -57,18 +55,16 @@ except Exception as e:
 # --- ReAct Prompting Framework ---
 def build_react_prompt(objective, history):
     """Builds the prompt for the ReAct loop."""
-    # Truncate history to avoid token limits
-    if len(history) > 2000:
-        history = "..." + history[-2000:]
+    if len(history) > 4000:
+        history = "..." + history[-4000:]
     
     tool_definitions = """
     AVAILABLE TOOLS:
-    1. sheets_get_cell_value(cell_notation: str): Read data from spreadsheet cells
-    2. sheets_update_cell_value(cell_notation: str, value: any): Update spreadsheet data  
-    3. web_search(query: str): Search the web for current market information
-    4. final_decision(action: str, symbol: str, quantity: int, target_price: float, rationale: str): Make final investment decision
-    
-    Available data sources: Stock_Ref sheet and Ref sheet contain reference information.
+    1. web_search(query: str): Search the web for current market information, news, and stock prices.
+    2. sheets_get_cell_value(cell_notation: str): Read data from a single spreadsheet cell.
+    3. sheets_get_range_values(range_notation: str): Read data from a range of spreadsheet cells.
+    4. sheets_update_cell_value(cell_notation: str, value: any): Update spreadsheet data.
+    5. final_decision(action: str, symbol: str, quantity: float, target_price: float, rationale: str): Make final investment decision.
     """
     
     prompt = f"""
@@ -94,40 +90,8 @@ def build_react_prompt(objective, history):
     """
     return prompt
 
-def execute_web_search(query):
-    """Execute web search using Tavily API"""
-    print(f"Executing web search for: '{query}'")
-    try:
-        url = "https://api.tavily.com/search"
-        headers = {
-            "Content-Type": "application/json",
-        }
-        data = {
-            "api_key": TAVILY_API_KEY,
-            "query": query,
-            "max_results": 3,
-            "search_depth": "advanced"
-        }
-        
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
-        
-        search_results = response.json()
-        
-        # Format results for the agent
-        formatted_results = "\n".join([
-            f"Title: {result.get('title', 'N/A')}\nContent: {result.get('content', 'N/A')}\nURL: {result.get('url', 'N/A')}\n"
-            for result in search_results.get('results', [])
-        ])
-        
-        return formatted_results if formatted_results else "No search results found."
-        
-    except Exception as e:
-        print(f"Error during web search: {e}")
-        return f"Error performing search: {e}"
-
-def call_grok_api(prompt):
-    """Call Grok API for investment analysis"""
+def call_grok_api(prompt, use_search=False):
+    """Call Grok API for investment analysis, with an option for web search."""
     try:
         url = "https://api.x.ai/v1/chat/completions"
         headers = {
@@ -137,29 +101,34 @@ def call_grok_api(prompt):
         
         data = {
             "messages": [
-                {
-                    "role": "system",
-                    "content": "You are Grok, a highly intelligent, helpful AI assistant. Return only valid JSON responses in the exact format requested."
-                },
-                {
-                    "role": "user", 
-                    "content": prompt
-                }
+                {"role": "system", "content": "You are Grok, a highly intelligent, helpful AI assistant. Return only valid JSON responses in the exact format requested."},
+                {"role": "user", "content": prompt}
             ],
             "model": "grok-4-0709",
             "stream": False,
             "temperature": 0.1,
-            "max_tokens": 300
+            "max_tokens": 4096
         }
         
-        response = requests.post(url, headers=headers, json=data, timeout=3600)
+        # --- MODIFICATION: Enable Grok's native search when needed ---
+        if use_search:
+            data["internet_search"] = True
+            print("Grok web search enabled for this call.")
+
+        response = requests.post(url, headers=headers, json=data, timeout=60) # 60s timeout for search
         response.raise_for_status()
         
         result = response.json()
         return result['choices'][0]['message']['content'].strip()
         
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP Error calling Grok API: {http_err}")
+        print(f"Response status code: {http_err.response.status_code}")
+        print(f"Response text: {http_err.response.text}")
+        return None
     except Exception as e:
-        print(f"Error calling Grok API: {e}")
+        print(f"General Error calling Grok API: {e}")
+        traceback.print_exc()
         return None
 
 def clean_and_convert_to_float(value_str):
@@ -178,11 +147,8 @@ def run_investment_cycle(request):
     print("--- Starting new autonomous investment cycle ---")
 
     try:
-        # --- NEW DEBUGGING STEP ---
-        # First, let's see what worksheets the service account can see.
         visible_sheets = sheets.list_all_worksheets()
         print(f"DEBUG: Service account can see the following worksheets: {visible_sheets}")
-        # --- END DEBUGGING STEP ---
 
         initial_portfolio = sheets.get_portfolio_and_market_data()
         cash_on_hand_str = sheets.get_cell_value(CASH_ON_HAND_CELL)
@@ -194,102 +160,48 @@ def run_investment_cycle(request):
         return (f"Could not read initial state from sheet. Error: {e}", 500)
 
     objective = f"""
-    You are an autonomous investment agent managing a portfolio.
-    
-    Cash Available: ${cash_on_hand:,.2f}
-    Current Portfolio: {json.dumps(initial_portfolio)}
-    
-    Investment objectives:
-    1. If no holdings in portfolio: Analyze market data and identify good investment opportunities
-    2. If holdings exist in portfolio: Analyze current positions and decide whether to:
-       - Hold current positions
-       - Buy more of existing holdings
-       - Sell some positions
-       - Buy new positions
-    
-    Use spreadsheet data and web search for current market information. Make profitable investment decisions.
+    Analyze the current portfolio, research relevant stocks, perform modeling, and conclude with a single trading decision. You must consider your available cash of ${cash_on_hand:,.2f}. Current portfolio: {json.dumps(initial_portfolio)}
     """
     
     history = f"Observation: Cycle started with ${cash_on_hand:,.2f} cash. Visible sheets are: {visible_sheets}"
-    
-    # Track recent actions to detect loops
     recent_actions = []
     
     for i in range(MAX_REASONING_STEPS):
         print(f"\n--- Reasoning Step {i+1}/{MAX_REASONING_STEPS} ---")
-        print(f"Current history length: {len(history)} characters")
         
         prompt = build_react_prompt(objective, history)
         
-        # No rate limiting needed for Grok - much more generous limits
-        
         try:
-            response_text = call_grok_api(prompt)
+            # The main reasoning call does NOT use search by default
+            response_text = call_grok_api(prompt, use_search=False)
             
             if not response_text:
-                print("Empty response detected. Using fallback logic.")
-                # Use fallback logic
-                if i == 0:
-                    tool_name = "sheets_get_cell_value"
-                    parameters = {"cell_notation": "Stock_Ref!A1"}
-                    thought = "Starting analysis by examining reference information"
-                else:
-                    tool_name = "final_decision" 
-                    parameters = {
-                        "action": "HOLD",
-                        "symbol": None,
-                        "quantity": 0,
-                        "target_price": None,
-                        "rationale": "Analysis completed based on available information"
-                    }
-                    thought = "Completing investment analysis"
-            else:
-                print(f"Raw Grok response: '{response_text}'")
-                
-                decision_json = json.loads(response_text)
-                thought = decision_json.get('thought', 'No analysis provided')
-                action_details = decision_json.get('action', {})
-                tool_name = action_details.get('tool_name')
-                parameters = action_details.get('parameters', {})
+                raise ValueError("Empty response from Grok API")
+
+            print(f"Raw Grok response: '{response_text}'")
+            decision_json = json.loads(response_text)
+            thought = decision_json.get('thought', 'No analysis provided')
+            action_details = decision_json.get('action', {})
+            tool_name = action_details.get('tool_name')
+            parameters = action_details.get('parameters', {})
             
             print(f"Thought: {thought}")
             print(f"Action: {tool_name} with {parameters}")
             
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
-            # Investment fallback: gather info or make decision
-            if i == 0:  # First step, gather data
-                tool_name = "sheets_get_cell_value"
-                parameters = {"cell_notation": "Stock_Ref!A1"}
-                thought = "Accessing reference data due to parsing error"
-            else:  # Later steps, make investment decision
-                tool_name = "final_decision"
-                parameters = {
-                    "action": "HOLD",
-                    "symbol": "N/A", 
-                    "quantity": 0,
-                    "target_price": 0,
-                    "rationale": "Investment analysis completed, maintaining current positions due to parsing limitations"
-                }
-                thought = "Concluding investment analysis due to parsing limitations"
         except Exception as e:
-            print(f"Error with Grok API: {e}")
-            history += f"\nObservation: API error. Trying fallback approach."
+            print(f"Error processing Grok response: {e}")
+            history += f"\nObservation: Grok response error. Trying a different approach."
             continue
 
         if not tool_name:
             print("No tool chosen by agent. Ending cycle.")
             break
         
-        # Check for repeated actions (potential loop)
         action_signature = f"{tool_name}({json.dumps(parameters, sort_keys=True)})"
         recent_actions.append(action_signature)
-        if len(recent_actions) > 3:
-            recent_actions.pop(0)
-        
-        if len(recent_actions) >= 3 and len(set(recent_actions)) == 1:
+        if len(recent_actions) > 2 and len(set(recent_actions[-3:])) == 1:
             print(f"LOOP DETECTED: Agent is repeating the same action: {action_signature}")
-            history += f"\nObservation: Loop detected - you are repeating the same action. Please try a different approach or make a final_decision."
+            history += f"\nObservation: Loop detected. Please try a different tool or make a final_decision."
             continue
         
         observation = ""
@@ -305,8 +217,7 @@ def run_investment_cycle(request):
 
                 if action == 'BUY' and trade_value > cash_on_hand:
                     observation = f"INSUFFICIENT FUNDS. Cannot execute BUY order of ${trade_value:,.2f} with only ${cash_on_hand:,.2f} available."
-                    print(observation)
-                    history += f"\nThought: {thought}\nAction: {tool_name}({json.dumps(parameters)})\nObservation: {observation}"
+                    history += f"\nThought: {thought}\nAction: {action_signature}\nObservation: {observation}"
                     continue
 
                 sheets.log_transaction(
@@ -325,20 +236,21 @@ def run_investment_cycle(request):
             print("--- Investment cycle completed successfully ---")
             return ("Investment cycle completed.", 200)
 
+        elif tool_name == 'web_search':
+            # --- MODIFICATION: Call Grok API with search enabled ---
+            search_query = parameters.get('query', '')
+            observation = call_grok_api(f"Please perform a web search for: '{search_query}' and provide a concise summary.", use_search=True)
         elif tool_name == 'sheets_get_cell_value':
             observation = sheets.get_cell_value(**parameters)
+        elif tool_name == 'sheets_get_range_values':
+            observation = sheets.get_range_values(**parameters)
         elif tool_name == 'sheets_update_cell_value':
             observation = sheets.update_cell_value(**parameters)
-        elif tool_name == 'web_search':
-            observation = execute_web_search(parameters.get('query', ''))
         else:
-            observation = f"Unknown tool '{tool_name}'. Available tools: sheets_get_cell_value, sheets_update_cell_value, web_search, final_decision"
+            observation = f"Unknown tool '{tool_name}'."
             
         print(f"Observation: {observation}")
-        history += f"\nThought: {thought}\nAction: {tool_name}({json.dumps(parameters)})\nObservation: {observation}"
+        history += f"\nThought: {thought}\nAction: {action_signature}\nObservation: {str(observation)}"
 
     print("Max reasoning steps reached. Ending cycle.")
-    print(f"DEBUGGING: Recent actions taken: {recent_actions}")
-    print(f"DEBUGGING: Final history length: {len(history)} characters")
-    print(f"DEBUGGING: Last 500 characters of history: {history[-500:]}")
     return ("Cycle ended due to max steps.", 200)
