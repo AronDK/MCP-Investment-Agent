@@ -1,0 +1,7 @@
+functions-framework
+google-cloud-secret-manager
+google-generativeai
+gspread
+google-auth-oauthlib
+pytz
+requests
