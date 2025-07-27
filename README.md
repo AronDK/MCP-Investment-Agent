@@ -14,22 +14,6 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
 - **Scheduled Execution**: Can be automated with Google Cloud Scheduler
 - **Anti-Hallucination**: Enhanced prompts and validation to ensure accurate financial data
 
-## 🏗️ Architecture
-
-```
-┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
-│  Cloud Scheduler │───▶│ Cloud Function│───▶│  Investment     │
-│  (Triggers)     │    │  (main.py)   │    │  Agent (Grok-4) │
-└─────────────────┘    └──────────────┘    └─────────────────┘
-                              │                       │
-                              ▼                       ▼
-                    ┌──────────────────┐    ┌─────────────────┐
-                    │  Google Sheets   │    │ SerpApi Google  │
-                    │  (Portfolio Data)│    │ Finance + Grok  │
-                    └──────────────────┘    │ Live Search     │
-                                           └─────────────────┘
-```
-
 ## 🧠 How It Works
 
 1. **Data Collection**: Reads current portfolio positions and cash balance from Google Sheets
@@ -201,11 +185,3 @@ This software is for educational and research purposes only. It is not financial
 - [ ] Backtesting capabilities with historical data
 - [ ] Real-time portfolio rebalancing
 - [ ] Sentiment analysis integration
-
-## 📞 Support
-
-For questions, issues, or contributions, please open an issue on GitHub.
-
----
-
-*Built with ❤️ for the future of autonomous investing*
