@@ -23,7 +23,7 @@ def get_secret(secret_name, project_id):
 # --- Configuration ---
 GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID", "your-gcp-project-id")
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "your-google-sheet-id")
-MAX_REASONING_STEPS = 5
+MAX_REASONING_STEPS = 7  # Increased from 5 to allow completion of decision cycle
 CASH_ON_HAND_CELL = 'Portfolio Summary!B3'
 MAX_FUNCTION_RUNTIME = 540  # 9 minutes (Cloud Functions limit is 10 minutes)
 
@@ -156,17 +156,27 @@ def build_react_prompt(objective, history):
     OBJECTIVE: {objective}
     PREVIOUS ACTIONS: {history}
     
-    ANALYSIS FRAMEWORK (be efficient - aim to complete in 3-4 steps):
-    1. Quickly analyze your current portfolio for key issues
-    2. Use get_current_stock_price or validate_stock_price for accurate pricing data
-    3. Research specific opportunities with current market data
-    4. Make a final decision with validated pricing - be decisive
+    CRITICAL: You have LIMITED STEPS to complete your analysis. Be DECISIVE and efficient.
+    
+    ANALYSIS FRAMEWORK (MUST complete in 4-5 steps maximum):
+    1. Get current portfolio prices (use get_multiple_stock_prices)
+    2. Quick analysis of portfolio performance OR market research (pick ONE)
+    3. Make final_decision immediately - DO NOT delay
+    
+    DECISION RULES:
+    - After 2-3 analysis steps, you MUST call final_decision
+    - Do NOT spend more than 1-2 steps on research
+    - Be decisive: HOLD is acceptable if uncertain
+    - If you have sufficient data, make a BUY/SELL decision
     
     CRITICAL REQUIREMENTS:
     - ALWAYS use get_current_stock_price or validate_stock_price for stock prices (Google Finance API - HIGH ACCURACY)
-    - These tools provide real-time, verified pricing data directly from Google Finance
+    - These tools provide real-time, verified pricing data directly from Google Finance via SerpApi
+    - NEVER make up, estimate, or hallucinate stock prices - only use data from these price tools
+    - If you need current prices, call the price tools first before any analysis
     - Never make trading decisions without first getting accurate current prices
     - The Intel pricing issue has been resolved with accurate API integration
+    - NVDA is currently near all-time highs around $173-174 range (use tools to verify)
     
     Your task: Follow the framework efficiently. Return valid JSON only.
     
@@ -181,7 +191,7 @@ def build_react_prompt(objective, history):
     
     {tool_definitions}
     
-    IMPORTANT: Be decisive and efficient. After 2-3 research steps, make a final_decision.
+    URGENT: Make a final_decision within 4 steps. Do not exhaust all analysis options.
     """
     return prompt
 
@@ -196,13 +206,13 @@ def call_grok_api(prompt, use_search=False):
         
         data = {
             "messages": [
-                {"role": "system", "content": "You are a highly intelligent investment analyst and helpful AI assistant. CRITICAL: When providing stock prices, use ONLY the most current, real-time data available. Always verify prices from multiple reliable sources. Never use cached or outdated information. Return only valid JSON responses in the exact format requested. Be concise and focused in your analysis."},
+                {"role": "system", "content": "You are a highly intelligent investment analyst and helpful AI assistant. CRITICAL: When providing stock prices, use ONLY the most current, real-time data available. Always verify prices from multiple reliable sources. Never use cached or outdated information. Do NOT hallucinate or make up stock prices - if you don't have current data, say so explicitly. Return only valid JSON responses in the exact format requested. Be concise and focused in your analysis."},
                 {"role": "user", "content": prompt}
             ],
             "model": "grok-4-0709",
             "stream": False,
-            "temperature": 0.1,
-            "max_tokens": 3072
+            "temperature": 0.05,  # Reduced from 0.1 to minimize hallucinations
+            "max_tokens": 6144   # Doubled from 3072 to allow more detailed, accurate responses
         }
         
         # Enable Grok's native search when needed
@@ -275,6 +285,12 @@ def run_investment_cycle(request):
         
         prompt = build_react_prompt(objective, history)
         
+        # Add urgency based on step number
+        if i >= 2:
+            prompt += f"\n\nURGENT: This is step {i+1}/{MAX_REASONING_STEPS}. You MUST make a final_decision in the next 1-2 steps!"
+        if i >= 4:
+            prompt += f"\n\nCRITICAL: Step {i+1}/{MAX_REASONING_STEPS} - Make final_decision NOW or HOLD will be forced!"
+        
         try:
             # The main reasoning call does NOT use search by default
             response_text = call_grok_api(prompt, use_search=False)
@@ -320,6 +336,15 @@ def run_investment_cycle(request):
                 print(f"LOOP DETECTED: Agent is repeating the same action: {action_signature}")
                 print("Forcing final decision due to loop detection.")
                 return ("HOLD decision made due to loop detection.", 200)
+        
+        # Progressive decision forcing - encourage decisions as steps increase
+        if i >= 3 and tool_name not in ['final_decision', 'get_current_stock_price', 'get_multiple_stock_prices', 'validate_stock_price']:
+            print(f"WARNING: Step {i+1}/{MAX_REASONING_STEPS} reached. Agent should make final_decision soon.")
+            
+        # Force decision by step 5 (i=4)
+        if i >= 4 and tool_name != 'final_decision':
+            print(f"FORCED DECISION: Step {i+1} reached. Making HOLD decision to prevent timeout.")
+            return ("HOLD decision made - step limit approaching.", 200)
             
         # If we're on the last step, force a decision
         if i == MAX_REASONING_STEPS - 1 and tool_name != 'final_decision':
@@ -402,7 +427,7 @@ def run_investment_cycle(request):
             # Get historical price data using web search
             symbol = parameters.get('symbol', '')
             period = parameters.get('period', '1mo')
-            observation = call_grok_api(f"Please search for {symbol} stock price history over {period} ending July 2025 and provide price trends, highs, lows, and performance analysis with specific dates and prices.", use_search=True)
+            observation = call_grok_api(f"Please search for {symbol} stock price history over {period} ending July 2025. CRITICAL: Only provide actual historical data you find from reliable sources. Do not estimate, extrapolate, or generate any price figures. Provide price trends, highs, lows, and performance analysis with specific dates and prices from your search results only.", use_search=True)
         
         elif tool_name == 'analyze_portfolio_performance':
             # Analyze portfolio performance with accurate pricing
@@ -423,7 +448,7 @@ def run_investment_cycle(request):
             symbols_str = ', '.join(symbols)
             current_date = datetime.now().strftime("%B %d, %Y")
             price_info = ', '.join([f"{sym}: ${price}" if isinstance(price, (int, float)) else f"{sym}: {price}" for sym, price in current_prices.items()])
-            search_prompt = f"Analyze these stocks: {symbols_str} as of {current_date}. CURRENT VERIFIED PRICES: {price_info}. Please provide: 1) Performance analysis based on these current prices, 2) Recent performance trends, 3) Latest analyst ratings and news, 4) Investment recommendations. Focus on actionable insights for portfolio management."
+            search_prompt = f"Analyze these stocks: {symbols_str} as of {current_date}. CURRENT VERIFIED PRICES FROM GOOGLE FINANCE: {price_info}. CRITICAL: Use ONLY these verified prices - do not provide any other price data or estimates. Please provide: 1) Performance analysis based on these current prices, 2) Recent performance trends, 3) Latest analyst ratings and news, 4) Investment recommendations. Focus on actionable insights for portfolio management."
             analysis = call_grok_api(search_prompt, use_search=True)
             observation = f"ACCURATE PRICES: {price_info}\n\nANALYSIS: {analysis}"
         

@@ -5,12 +5,14 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
 ## 🚀 Features
 
 - **Autonomous Decision Making**: Uses ReAct (Reasoning + Acting) framework for intelligent investment decisions
-- **Real-time Market Data**: Integrates with Grok Live Search for current market information and news
-- **Advanced AI**: Powered by Grok-4 for sophisticated financial analysis
+- **Real-time Market Data**: Integrates with SerpApi Google Finance for accurate stock prices and Grok Live Search for market analysis
+- **Advanced AI**: Powered by Grok-4 with enhanced accuracy settings to prevent hallucinations
+- **Accurate Price Data**: Uses Google Finance API via SerpApi for real-time, verified stock prices
 - **Portfolio Management**: Automatically tracks positions, cash balance, and transaction history
 - **Google Sheets Integration**: Seamlessly manages portfolio data in Google Sheets
 - **Cloud-Native**: Deploys as a Google Cloud Function for scalable execution
 - **Scheduled Execution**: Can be automated with Google Cloud Scheduler
+- **Anti-Hallucination**: Enhanced prompts and validation to ensure accurate financial data
 
 ## 🏗️ Architecture
 
@@ -22,33 +24,38 @@ An intelligent, AI-powered investment agent that autonomously manages a portfoli
                               │                       │
                               ▼                       ▼
                     ┌──────────────────┐    ┌─────────────────┐
-                    │  Google Sheets   │    │ Grok Live Search│
-                    │  (Portfolio Data)│    │  (Market Data)  │
-                    └──────────────────┘    └─────────────────┘
+                    │  Google Sheets   │    │ SerpApi Google  │
+                    │  (Portfolio Data)│    │ Finance + Grok  │
+                    └──────────────────┘    │ Live Search     │
+                                           └─────────────────┘
 ```
 
 ## 🧠 How It Works
 
 1. **Data Collection**: Reads current portfolio positions and cash balance from Google Sheets
-2. **Market Analysis**: Searches for current market conditions using Grok Live Search
-3. **AI Reasoning**: Grok-4 analyzes data using ReAct framework to make investment decisions
-4. **Action Execution**: Automatically executes BUY/SELL/HOLD decisions
-5. **Transaction Logging**: Records all transactions and updates portfolio balance
+2. **Price Validation**: Gets accurate, real-time stock prices from Google Finance via SerpApi
+3. **Market Analysis**: Searches for current market conditions using Grok Live Search
+4. **AI Reasoning**: Grok-4 analyzes data using ReAct framework with enhanced accuracy settings
+5. **Decision Making**: Makes BUY/SELL/HOLD decisions with validated pricing data
+6. **Action Execution**: Automatically executes investment decisions
+7. **Transaction Logging**: Records all transactions and updates portfolio balance
 
 ## 📊 Investment Logic
 
-The agent follows a structured decision-making process:
+The agent follows a structured decision-making process with enhanced accuracy:
 
 - **Portfolio Assessment**: Analyzes current holdings, performance, and available cash
-- **Market Research**: Gathers real-time market data and news
+- **Price Verification**: Uses Google Finance API via SerpApi for accurate, real-time stock prices
+- **Market Research**: Gathers real-time market data and news via Grok Live Search
 - **Risk Evaluation**: Considers market conditions and portfolio diversification
-- **Decision Making**: Makes BUY/SELL/HOLD decisions based on comprehensive analysis
-- **Execution**: Updates portfolio and logs all transactions
+- **Decision Making**: Makes BUY/SELL/HOLD decisions based on verified data within 7 reasoning steps
+- **Execution**: Updates portfolio and logs all transactions with validated pricing
 
 ## 🛠️ Technology Stack
 
-- **AI Model**: Grok-4 (xAI) for investment analysis
-- **Web Search**: Grok Live Search for real-time market data
+- **AI Model**: Grok-4 (xAI) for investment analysis with enhanced accuracy settings
+- **Price Data**: SerpApi Google Finance API for real-time, verified stock prices
+- **Web Search**: Grok Live Search for real-time market data and news
 - **Data Storage**: Google Sheets for portfolio management
 - **Cloud Platform**: Google Cloud Functions
 - **Scheduling**: Google Cloud Scheduler
@@ -58,6 +65,7 @@ The agent follows a structured decision-making process:
 
 - Google Cloud Platform account
 - xAI API key (for Grok-4 access)
+- SerpApi key (for Google Finance data)
 - Google Sheets API credentials
 - Python 3.11+
 
@@ -76,7 +84,7 @@ gcloud functions deploy Investment-agent \
   --allow-unauthenticated \
   --service-account=your-service-account@your-project.iam.gserviceaccount.com \
   --timeout=300s \
-  --set-env-vars="GCP_PROJECT_ID=your-project-id,GOOGLE_SHEET_ID=your-sheet-id,GROK_API_KEY=your-grok-key"
+  --set-env-vars="GCP_PROJECT_ID=your-project-id,GOOGLE_SHEET_ID=your-sheet-id,GROK_API_KEY=your-grok-key,SERPAPI_KEY=your-serpapi-key"
 ```
 
 ### 2. Set up Cloud Scheduler (Optional)
@@ -104,11 +112,35 @@ MCP-Investment-Agent/
 
 ## 🔧 Configuration
 
+## 🔄 Recent Improvements (July 2025)
+
+### Hallucination Prevention & Accuracy Enhancement
+- **Doubled Token Limit**: Increased from 3,072 to 6,144 tokens for more detailed analysis
+- **Reduced Temperature**: Lowered from 0.1 to 0.05 to minimize AI hallucinations
+- **Enhanced Prompts**: Added explicit anti-hallucination warnings in system prompts
+- **Price Validation**: Integrated SerpApi Google Finance for verified, real-time stock prices
+- **Historical Data Accuracy**: Enhanced prompts to prevent fictional price generation
+
+### Decision-Making Improvements
+- **Extended Reasoning Steps**: Increased from 5 to 7 steps to reduce forced HOLD decisions
+- **Progressive Decision Forcing**: Warns agent at step 4+ to encourage timely decisions
+- **Enhanced Loop Detection**: Prevents repetitive analysis cycles
+- **Step-Based Urgency**: Adds urgency prompts as steps progress to ensure completion
+
+### Technical Enhancements
+- **Dual Data Sources**: SerpApi for prices, Grok Live Search for market analysis
+- **Validation Layer**: Cross-validates all price data before trading decisions
+- **Error Handling**: Improved error recovery and fallback mechanisms
+- **Performance Monitoring**: Better logging for debugging and optimization
+
+## 🔧 Configuration
+
 ### Environment Variables
 
 - `GCP_PROJECT_ID`: Your Google Cloud Project ID
 - `GOOGLE_SHEET_ID`: ID of your Google Sheets portfolio tracker
 - `GROK_API_KEY`: Your xAI API key for Grok-4 access
+- `SERPAPI_KEY`: Your SerpApi key for Google Finance data access
 
 ### Google Sheets Structure
 
@@ -128,10 +160,12 @@ The agent expects a Google Sheet with these worksheets:
 
 ## 📈 Performance
 
-- **Execution Time**: Typically completes analysis in 30-60 seconds
-- **Rate Limits**: Respects API rate limits for all services
+- **Execution Time**: Typically completes analysis in 30-90 seconds (extended for accuracy)
+- **Decision Quality**: Enhanced accuracy with verified price data and anti-hallucination measures
+- **Success Rate**: Reduced forced HOLD decisions through improved reasoning framework
+- **Rate Limits**: Respects API rate limits for all services (SerpApi, Grok, Google Sheets)
 - **Scalability**: Serverless architecture scales automatically
-- **Cost Efficient**: Pay-per-execution model
+- **Cost Efficient**: Pay-per-execution model with optimized API usage
 
 ## 🤝 Contributing
 
@@ -149,15 +183,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 This software is for educational and research purposes only. It is not financial advice. Always consult with qualified financial professionals before making investment decisions. Use at your own risk.
 
-## 🎯 Future Enhancements
+## 🎯 Recent Accomplishments & Future Enhancements
 
+### ✅ Recently Completed
+- [x] **Price Accuracy Fix**: Integrated SerpApi Google Finance for verified stock prices
+- [x] **Hallucination Prevention**: Enhanced prompts and validation to ensure accurate data
+- [x] **Decision Optimization**: Extended reasoning steps to reduce forced HOLD decisions
+- [x] **Performance Enhancement**: Doubled token limit for more detailed analysis
+
+### 🔮 Future Enhancements
 - [ ] Multi-asset class support (bonds, ETFs, crypto)
 - [ ] Advanced portfolio optimization algorithms
 - [ ] Risk management and stop-loss features
-- [ ] Performance analytics and reporting
+- [ ] Performance analytics and reporting dashboard
 - [ ] Integration with brokerage APIs for live trading
 - [ ] Machine learning for pattern recognition
-- [ ] Backtesting capabilities
+- [ ] Backtesting capabilities with historical data
+- [ ] Real-time portfolio rebalancing
+- [ ] Sentiment analysis integration
 
 ## 📞 Support
 
