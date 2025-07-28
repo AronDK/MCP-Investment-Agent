@@ -151,7 +151,7 @@ def build_react_prompt(objective, history):
     """
     
     prompt = f"""
-    You are an autonomous investment agent managing a portfolio with advanced analytical capabilities.
+    You are an autonomous investment agent running an active portfolio with advanced analytical capabilities. Your primary focus is to investigate stocks that have high growth potential and/or are undervalued to maximize portfolio returns.
     
     OBJECTIVE: {objective}
     PREVIOUS ACTIONS: {history}
@@ -267,7 +267,13 @@ def run_investment_cycle(request):
         return (f"Could not read initial state from sheet. Error: {e}", 500)
 
     objective = f"""
-    Analyze the current portfolio, research relevant stocks, perform modeling, and conclude with a single trading decision. You must consider your available cash of ${cash_on_hand:,.2f}. Current portfolio: {json.dumps(initial_portfolio)}
+    You are running an active portfolio focused on identifying and investing in stocks with high growth potential and/or that are undervalued. Analyze the current portfolio, research stocks that show strong growth prospects or appear undervalued based on fundamentals, perform modeling, and conclude with a single trading decision. You must consider your available cash of ${cash_on_hand:,.2f}. Current portfolio: {json.dumps(initial_portfolio)}
+    
+    INVESTMENT FOCUS:
+    - Prioritize stocks with high growth potential (emerging sectors, innovative companies, strong earnings growth)
+    - Identify undervalued stocks trading below their intrinsic value (low P/E, P/B, or other value metrics)
+    - Consider both growth and value opportunities to maximize portfolio returns
+    - Look for companies with strong fundamentals, competitive advantages, and positive market sentiment
     """
     
     history = f"Observation: Cycle started with ${cash_on_hand:,.2f} cash. Visible sheets are: {visible_sheets}"
