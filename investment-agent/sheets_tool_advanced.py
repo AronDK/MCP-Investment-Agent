@@ -181,3 +181,87 @@ class SheetsTool:
         except Exception as e:
             print(f"Error deleting worksheet '{title}': {e}")
             raise
+
+    def get_stock_transaction_history(self, symbol):
+        """Retrieves all previous transactions for a specific stock symbol from Transactions_OSV."""
+        try:
+            print(f"Fetching transaction history for stock: {symbol}")
+            transactions_sheet = self.spreadsheet.worksheet("Transactions_OSV")
+            all_records = transactions_sheet.get_all_records()
+            
+            # Filter transactions for the specific symbol
+            stock_transactions = []
+            for record in all_records:
+                if record.get('Stock Ticker', '').upper() == symbol.upper():
+                    # Clean up the record for better readability
+                    clean_record = {
+                        'Date': record.get('Date', ''),
+                        'Action': record.get('Action', ''),
+                        'Quantity': record.get('Quantity', 0),
+                        'Price': record.get('Price', 0),
+                        'Total Value': record.get('Total Value', 0),
+                        'Rationale': record.get('Rationale', 'No rationale provided'),
+                        'P/L': record.get('Unrealized P/L', record.get('P/L', 0)),
+                        'P/L %': record.get('Unrealized P/L %', record.get('P/L %', 0))
+                    }
+                    stock_transactions.append(clean_record)
+            
+            if not stock_transactions:
+                return f"No previous transactions found for {symbol}"
+            
+            # Sort by date (most recent first)
+            stock_transactions.sort(key=lambda x: x['Date'], reverse=True)
+            
+            # Create a summary
+            total_transactions = len(stock_transactions)
+            buy_count = sum(1 for t in stock_transactions if t['Action'].upper() == 'BUY')
+            sell_count = sum(1 for t in stock_transactions if t['Action'].upper() == 'SELL')
+            
+            result = {
+                'symbol': symbol.upper(),
+                'total_transactions': total_transactions,
+                'buy_transactions': buy_count,
+                'sell_transactions': sell_count,
+                'transaction_history': stock_transactions,
+                'investment_pattern_summary': self._analyze_investment_pattern(stock_transactions)
+            }
+            
+            print(f"Found {total_transactions} transactions for {symbol}: {buy_count} buys, {sell_count} sells")
+            return result
+            
+        except Exception as e:
+            print(f"Error fetching transaction history for {symbol}: {e}")
+            return f"Error retrieving transaction history for {symbol}: {str(e)}"
+    
+    def _analyze_investment_pattern(self, transactions):
+        """Analyzes the investment pattern from transaction history."""
+        if not transactions:
+            return "No transaction pattern available"
+        
+        # Extract rationales
+        rationales = [t.get('Rationale', '') for t in transactions if t.get('Rationale')]
+        
+        # Count action types
+        recent_actions = [t['Action'] for t in transactions[:5]]  # Last 5 transactions
+        
+        # Identify common investment themes
+        common_themes = []
+        rationale_text = ' '.join(rationales).lower()
+        
+        if 'undervalued' in rationale_text or 'value' in rationale_text:
+            common_themes.append('Value investing approach')
+        if 'growth' in rationale_text or 'ai' in rationale_text or 'innovation' in rationale_text:
+            common_themes.append('Growth/technology focus')
+        if 'diversif' in rationale_text:
+            common_themes.append('Portfolio diversification')
+        if 'profit' in rationale_text or 'gain' in rationale_text:
+            common_themes.append('Profit-taking strategy')
+        
+        pattern_summary = {
+            'recent_action_trend': recent_actions,
+            'common_investment_themes': common_themes,
+            'most_recent_rationale': rationales[0] if rationales else 'No rationale available',
+            'trading_frequency': 'High' if len(transactions) > 10 else 'Moderate' if len(transactions) > 5 else 'Low'
+        }
+        
+        return pattern_summary
